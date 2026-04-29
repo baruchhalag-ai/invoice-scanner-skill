@@ -1,6 +1,7 @@
 {
   "schema_version": "1.0",
   "processed_emails": {},
+  "billed_months": {},
   "stats": {
     "total_processed": 0,
     "total_uploaded": 0,

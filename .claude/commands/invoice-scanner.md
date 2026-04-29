@@ -262,6 +262,23 @@ This is the full pipeline, run either by the scheduled task or /invoice-scanner 
 - Read supplier-database.json, processed-log.json, and pending-review.json from Google Drive.
 - Read cpa-upload-script.json to verify teaching_complete=true. If false, STOP and tell user: "Teaching session not completed. Please run /invoice-scanner teach first."
 
+## DEDUPLICATION — TWO KEYS (CRITICAL)
+Before uploading ANY invoice, always check BOTH deduplication keys:
+1. **Gmail thread ID** (for email-based): check processed-log.json.processed_emails keys
+2. **Billing key** = `"<normalized_supplier_name>-<YYYY-MM>"` (for all types): check processed-log.json.billed_months
+
+If EITHER key matches → skip. Do not upload.
+This prevents double-upload even when the same invoice arrives via email AND monthly proactive check.
+
+When logging a successful upload, always record BOTH:
+- processed_emails["<thread_id>"] (or "website-<supplier>-<YYYY-MM>" if no thread ID)
+- billed_months["<supplier>-<YYYY-MM>"] = { uploaded_at, method, outcome }
+
+The billing month is extracted from:
+1. Email subject line (look for month name or MM/YYYY pattern)
+2. Invoice date in attachment if parseable
+3. Fallback: current calendar month
+
 ### PHASE 2: GMAIL SCAN
 Run these 3 Gmail searches (mcp__af9311f4__search_threads).
 IMPORTANT: All queries include `in:anywhere` to search ALL folders including Spam, Promotions, and All Mail — not just Inbox.

@@ -34,6 +34,18 @@
         }
       }
     },
+    "billed_months": {
+      "type": "object",
+      "description": "Second deduplication key: supplier+month. Key format: 'normalized_supplier-YYYY-MM'. Prevents double-upload when same invoice arrives via email AND proactive website check.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "uploaded_at": { "type": "string", "format": "date-time" },
+          "method": { "type": "string", "enum": ["email_attachment", "website_notification", "website_proactive"] },
+          "outcome": { "type": "string" }
+        }
+      }
+    },
     "stats": {
       "type": "object",
       "properties": {
