@@ -37,11 +37,15 @@ Use mcp__af9311f4... tools for Gmail operations.
    - Then stop execution.
 
 ### PHASE 2: GMAIL SCAN
-Run these 3 searches using mcp__af9311f4__search_threads:
-1. Query: `(חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") has:attachment newer_than:2d`
-2. Query: `(invoice OR receipt OR "tax invoice" OR billing) has:attachment newer_than:2d`
+Run these 3 searches using mcp__af9311f4__search_threads.
+IMPORTANT: All queries use `in:anywhere` to search ALL folders including Spam, Promotions, All Mail.
+Queries do NOT require has:attachment — this catches notification emails from suppliers like
+כביש 6 who send "invoice ready" emails without attaching the file.
+
+1. Query: `in:anywhere (חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") newer_than:2d`
+2. Query: `in:anywhere (invoice OR receipt OR "tax invoice" OR billing) newer_than:2d`
 3. Query: Build a from-domain query from email_patterns in supplier-database.json.
-   Example: `(from:@partner.co.il OR from:@cellcom.co.il) has:attachment newer_than:2d`
+   Example: `in:anywhere (from:@partner.co.il OR from:@cellcom.co.il) newer_than:2d`
    Skip this search if no email_patterns exist yet.
 
 Combine all results. De-duplicate by thread ID.

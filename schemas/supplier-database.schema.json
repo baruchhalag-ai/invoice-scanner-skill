@@ -37,7 +37,18 @@
           "email_patterns": {
             "type": "array",
             "items": { "type": "string" }
-          }
+          },
+          "retrieval_method": {
+            "type": "string",
+            "enum": ["email_attachment", "website_notification", "website_proactive"],
+            "default": "email_attachment",
+            "description": "email_attachment=PDF in email; website_notification=email triggers website login; website_proactive=no email, check site monthly"
+          },
+          "website_url": { "type": ["string", "null"], "description": "Supplier website URL for invoice retrieval" },
+          "website_phone": { "type": ["string", "null"], "description": "Phone number to use for SMS login on supplier website" },
+          "monthly_check_day": { "type": ["integer", "null"], "minimum": 1, "maximum": 28, "description": "Day of month to proactively check for invoice (website_proactive only)" },
+          "website_script": { "type": "array", "description": "Recorded computer-use steps for website retrieval (filled by /invoice-scanner teach <supplier>)" },
+          "website_teaching_complete": { "type": "boolean", "default": false }
         }
       }
     }

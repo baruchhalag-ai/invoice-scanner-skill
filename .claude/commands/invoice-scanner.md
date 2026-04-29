@@ -121,6 +121,15 @@ Steps:
 ---
 
 ### /invoice-scanner teach
+### /invoice-scanner teach <supplier>
+
+Two modes:
+- `/invoice-scanner teach` — records the CPA app upload flow (one-time setup)
+- `/invoice-scanner teach <supplier>` — records a specific supplier's website flow (e.g. "teach כביש 6")
+
+---
+
+#### Mode 1: /invoice-scanner teach (CPA app)
 
 Record how to upload an invoice in the CPA app. Run this after setup.
 
@@ -147,6 +156,32 @@ Steps:
 12. Save updated cpa-upload-script.json back to Google Drive.
 13. Update memory/cpa-app-guide.md with a summary of the upload flow.
 14. Tell user: "Teaching complete! The upload flow is recorded. Run /invoice-scanner run to test the full pipeline."
+
+---
+
+#### Mode 2: /invoice-scanner teach <supplier> (website flow)
+
+Record how to retrieve an invoice from a specific supplier's website (e.g. כביש 6, סלקום).
+This handles both website_notification and website_proactive suppliers.
+
+Steps:
+1. Load supplier-database.json to get the supplier entry (website_url, website_phone, retrieval_method).
+2. Request computer-use access for Google Chrome and Messages app.
+3. Tell user: "I'll watch you retrieve the invoice from [supplier]'s website. Please go through the full process — I'll record every step."
+4. Use mcp__computer-use__teach_batch or teach_step to record:
+   a. Opening the supplier website (note the URL)
+   b. Filling in the phone/ID number
+   c. Requesting the SMS code
+   d. Reading the SMS code from the Mac Messages app
+   e. Entering the code on the website
+   f. Navigating to the invoice
+   g. Downloading the invoice (note where it saves)
+5. After recording, identify variable fields: phone number, SMS code location, download path.
+6. Load supplier-database.json from Google Drive.
+7. Update the supplier entry: website_script = recorded steps, website_teaching_complete = true.
+8. Save updated supplier-database.json to Google Drive.
+9. Update memory/cpa-app-guide.md with a note about this supplier's website flow.
+10. Tell user: "Teaching complete for [supplier]. Future invoices will be retrieved automatically."
 
 ---
 
@@ -196,13 +231,26 @@ Steps:
    - Should this supplier be auto-uploaded? (yes/no)
    - Is this expense tax-deductible? (yes/no)
    - What category? (communications / software_subscriptions / office_supplies / professional_services / travel_business / equipment / insurance_business / other_business)
+   - How does this supplier send invoices?
+       a) Email attachment (standard — PDF/image arrives in email)
+       b) Website notification (email arrives but no attachment — must log into their website to download)
+       c) No email — must check their website proactively each month
+   - If (b) or (c): What is their website URL? What phone number to use for login?
+   - If (c): What day of the month should we check? (e.g. 5th)
    - Any email domain pattern to match sender? (e.g., @supplier.com) — optional
    - Notes?
 2. Load supplier-database.json from Google Drive.
-3. Add the supplier entry with all fields.
+3. Add the supplier entry with all fields including:
+   - retrieval_method: "email_attachment" | "website_notification" | "website_proactive"
+   - website_url: (if applicable)
+   - website_phone: Barry's phone number for that site's login (if applicable)
+   - monthly_check_day: (if website_proactive)
+   - website_script: [] (empty — filled during /invoice-scanner teach <supplier>)
 4. Set normalized_name = lowercase version with בע"מ/ltd/inc/co. stripped.
 5. Save updated supplier-database.json to Google Drive.
-6. Confirm to user.
+6. If retrieval_method is "website_notification" or "website_proactive":
+   Tell user: "Run /invoice-scanner teach <supplier name> to record the website flow."
+7. Confirm to user.
 
 ---
 
@@ -215,10 +263,17 @@ This is the full pipeline, run either by the scheduled task or /invoice-scanner 
 - Read cpa-upload-script.json to verify teaching_complete=true. If false, STOP and tell user: "Teaching session not completed. Please run /invoice-scanner teach first."
 
 ### PHASE 2: GMAIL SCAN
-Run these 3 Gmail searches (mcp__af9311f4__search_threads):
-1. `(חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") has:attachment newer_than:2d`
-2. `(invoice OR receipt OR "tax invoice" OR billing) has:attachment newer_than:2d`
-3. From-domain search built from email_patterns in supplier-database.json (if any exist)
+Run these 3 Gmail searches (mcp__af9311f4__search_threads).
+IMPORTANT: All queries include `in:anywhere` to search ALL folders including Spam, Promotions, and All Mail — not just Inbox.
+
+1. `in:anywhere (חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") newer_than:2d`
+2. `in:anywhere (invoice OR receipt OR "tax invoice" OR billing) newer_than:2d`
+3. From-domain search built from email_patterns in supplier-database.json (if any exist):
+   `in:anywhere (from:@domain1.com OR from:@domain2.com) newer_than:2d`
+
+Note: Pass 1 and 2 intentionally do NOT require has:attachment — this catches notification
+emails from suppliers like כביש 6 who send a "your invoice is ready" email without attaching it.
+The retrieval_method field in supplier-database.json determines how to handle each supplier.
 
 Merge all results, deduplicate by thread ID.
 Filter out any thread ID already in processed-log.json processed_emails keys.
@@ -234,16 +289,19 @@ For each candidate thread:
    - No exact match: check if sender email domain matches any email_patterns → use that entry
    - No match: classify as UNKNOWN
 5. Route:
-   - auto_approve=true → add to "upload queue"
+   - auto_approve=true → check retrieval_method, then add to appropriate queue:
+       * retrieval_method="email_attachment" → "upload queue" (standard flow)
+       * retrieval_method="website_notification" → "website queue" (fetch from supplier website)
+       * retrieval_method="website_proactive" → skip (handled by monthly check, not email trigger)
    - auto_approve=false (explicitly blocked) → add to "skip list" (shown in digest for Barry's review)
    - UNKNOWN → add to "pending list"
 
-### PHASE 4: UPLOAD AUTO-APPROVED
-For each item in upload queue:
+### PHASE 4A: UPLOAD AUTO-APPROVED (email attachment)
+For each item in upload queue (retrieval_method="email_attachment"):
 1. Download attachment from Gmail (get attachment from get_thread result, save to /tmp/).
 2. Load cpa-upload-script.json to get the recorded upload steps.
 3. Execute the steps using computer-use, substituting per-invoice data (file path, date, amount, supplier, category from supplier-database.json).
-4. Take a screenshot after each key step to verify progress.
+4. Take a screenshot after each key step to verify.
 5. On success:
    - Add to processed-log.json: {supplier, outcome:"uploaded", processed_at:now, attachment_name}
    - Increment processed-log.json stats.total_uploaded
@@ -251,6 +309,20 @@ For each item in upload queue:
    - Check if retry_count < 3: set outcome="upload_failed_retry", increment retry_count
    - If retry_count >= 3: set outcome="upload_failed_permanent"
    - Add to processed-log.json
+
+### PHASE 4B: FETCH AND UPLOAD (website notification suppliers e.g. כביש 6)
+For each item in website queue (retrieval_method="website_notification"):
+1. Load the supplier's website_script from supplier-database.json (recorded during /invoice-scanner teach <supplier>).
+2. Execute the website script using computer-use:
+   a. Open the supplier's website
+   b. Fill in the phone number (from supplier entry's website_phone field)
+   c. Wait for SMS code to appear in Mac Messages app (take screenshot of Messages)
+   d. Enter the SMS code
+   e. Navigate to invoice download
+   f. Download the invoice to /tmp/
+3. Once downloaded, upload to CPA app (same as Phase 4A steps 2-6).
+4. On success: log outcome="uploaded_via_website"
+5. On failure: log outcome="website_fetch_failed", include in digest ⚠️ section
 
 ### PHASE 5: HANDLE PENDING AND SKIPPED
 - For each pending (unknown supplier) item: add to pending-review.json items array with status="awaiting_decision".
