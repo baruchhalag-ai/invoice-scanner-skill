@@ -124,6 +124,7 @@ For each item in pending list (unknown suppliers):
 For each item in skip list (blocked suppliers):
 - Add to processed-log.json.processed_emails with outcome="skipped_blocked_supplier"
 - Increment processed-log.json.stats.total_skipped
+- Keep a separate "skipped_list" in memory for the digest (include supplier, subject, amount)
 
 ### PHASE 6: CREATE GMAIL DRAFT DIGEST
 Compose a Gmail draft to baruch.halag@gmail.com.
@@ -137,20 +138,25 @@ Body (in Hebrew and English):
 סיכום סריקת החשבוניות היומית:
 
 ✅ הועלו אוטומטית: [N] חשבוניות
-[For each uploaded: - [supplier_name] | [subject]]
+[For each uploaded: - [supplier_name] | [subject] | [amount if detected]]
 
-⏳ ממתינים לאישורך: [N] חשבוניות
-[For each pending: - [supplier_detected] | [subject]]
+⏳ ממתינים לאישורך (ספקים לא מוכרים): [N] חשבוניות
+[For each pending: - [supplier_detected] | [subject] | [amount if detected]]
 לטיפול: פתח Claude ורשום /invoice-approve
 
-❌ דולגו (ספקים חסומים): [N]
-[For each skipped: - [supplier_name]]
+🚫 דולגו (ספקים חסומים) — לידיעתך בלבד: [N]
+[For each skipped: - [supplier_name] | [subject] | [amount if detected]]
+אם חשבונית מסוימת כן ניתנת לניכוי בניגוד לכלל, פתח Claude ורשום /invoice-approve
 
 ⚠️ נכשלו בהעלאה (ינסה שוב): [N]
 [For each failed: - [supplier_name] | [subject]]
 
 תאריך הרצה: [datetime]
 ```
+
+IMPORTANT: Blocked suppliers MUST always appear in the digest, even if auto-skipped.
+This allows Barry to spot exceptions — e.g. a normally-personal supplier who sent a
+legitimate business invoice. If he wants to upload a skipped invoice, he runs /invoice-approve.
 
 If ALL counts are 0 (nothing found): Subject "Invoice Scanner — Nothing New [DATE]", Body: "No new invoice emails found today."
 

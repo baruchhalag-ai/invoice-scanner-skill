@@ -235,7 +235,7 @@ For each candidate thread:
    - No match: classify as UNKNOWN
 5. Route:
    - auto_approve=true → add to "upload queue"
-   - auto_approve=false (explicitly blocked) → add to "skip list"
+   - auto_approve=false (explicitly blocked) → add to "skip list" (shown in digest for Barry's review)
    - UNKNOWN → add to "pending list"
 
 ### PHASE 4: UPLOAD AUTO-APPROVED
@@ -268,20 +268,26 @@ Body:
 סיכום הסריקה היומית:
 
 ✅ הועלו אוטומטית: N חשבוניות
-[list each: supplier name — amount — date]
+[list each: supplier name — amount — subject]
 
-⏳ ממתינים לאישורך: N חשבוניות
+⏳ ממתינים לאישורך (ספקים לא מוכרים): N חשבוניות
 [list each: supplier — amount — subject]
 כדי לטפל בהם, פתח Claude ורשום: /invoice-approve
 
-❌ דולגו (ספקים חסומים): N חשבוניות
-[list each: supplier]
+🚫 דולגו (ספקים חסומים) — לידיעתך בלבד: N חשבוניות
+[list each: supplier — amount — subject]
+אם חשבונית מסוימת כן ניתנת לניכוי, פתח Claude ורשום: /invoice-approve
 
 ⚠️ נכשלו בהעלאה: N חשבוניות (ינסה שוב מחר)
 [list each if any]
 
 מערכת Invoice Scanner
 ```
+
+IMPORTANT: Blocked suppliers MUST always appear in the digest (🚫 section), even though
+they are skipped automatically. Barry reviews this section to catch exceptions where a
+normally-blocked supplier sent a legitimate deductible invoice.
+If Barry wants to upload a blocked invoice, he runs /invoice-approve which will show it.
 
 Use mcp__af9311f4__create_draft to create this draft.
 If there are 0 items in all categories (nothing found), skip the digest or send a brief "Nothing new today" draft.

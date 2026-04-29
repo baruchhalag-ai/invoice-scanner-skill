@@ -1,5 +1,5 @@
 ---
-description: Review and approve or reject pending invoices from unknown suppliers
+description: Review and approve or reject pending invoices from unknown suppliers, or re-open a blocked invoice for upload
 allowed-tools:
   - mcp__69f0d116-75ea-46c6-82ab-35aef392ea70__read_file_content
   - mcp__69f0d116-75ea-46c6-82ab-35aef392ea70__create_file
@@ -20,15 +20,24 @@ allowed-tools:
 You are processing pending invoice approvals for Barry Halag (baruch.halag@gmail.com).
 
 ## Overview
-When the daily scanner finds invoices from unknown suppliers, they are saved in `pending-review.json`
-on Google Drive (in the "invoice-scanner/" folder). This command lets you review each one and decide
-what to do.
+This command handles two types of items:
+1. **Unknown suppliers** — invoices held in pending-review.json because Claude hasn't seen this supplier before
+2. **Blocked supplier exceptions** — invoices that were auto-skipped (supplier is on blocked list) but Barry saw them in the digest and wants to upload this specific one anyway
+
+Barry uses this command after reviewing the daily digest email.
 
 ## Steps
 
 ### 1. Load Pending Items
 Search Google Drive for "invoice-scanner pending-review" and read pending-review.json.
-If the items array is empty: tell user "Nothing pending — all clear! ✅" and stop.
+Also read processed-log.json to check if Barry mentions a specific blocked invoice he wants to re-open.
+
+If the items array is empty AND Barry didn't mention a specific blocked supplier: tell user "Nothing pending — all clear! ✅" and stop.
+
+**If Barry mentions a blocked supplier exception** (e.g. "I want to upload the Partner invoice from today"):
+- Find the matching thread in processed-log.json (outcome="skipped_blocked_supplier")
+- Treat it as a one-time upload (Choice 2 below) — do NOT change the supplier's blocked status
+- After upload, update processed-log.json outcome to "uploaded_exception"
 
 ### 2. Load Supporting Data
 Also load:
