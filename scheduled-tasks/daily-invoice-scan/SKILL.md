@@ -87,20 +87,26 @@ For each candidate thread ID:
    - UNKNOWN → pending list
 
 ### PHASE 4: UPLOAD AUTO-APPROVED INVOICES
+
+#### CPA App Details (recorded 2026-04-29)
+- App URL: https://hadadlevi.account-ant.com/
+- Documents page: https://hadadlevi.account-ant.com/7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7/documents
+- Upload: click blue "+" button → file picker modal → select PDF → "אישור ושליחה"
+- No fields needed (date/amount/category) — CPA assigns categories after receipt
+- Status after upload: "ממתין" (pending CPA review)
+
 For each item in upload queue:
 1. From the get_thread result, identify the attachment.
-   Save it to /tmp/invoice_[thread_id].[ext] using Bash.
-2. Load the computer-use script steps from cpa-upload-script.json.
-3. Execute each step using mcp__computer-use tools:
-   - open_application: open "חדד לוי רואי חשבון"
-   - Replay recorded steps, substituting variable fields:
-     * file_path: /tmp/invoice_[thread_id].[ext]
-     * date: invoice_date (formatted per field_mapping)
-     * amount: extracted from subject or body if possible
-     * supplier: sender_display_name
-     * category: supplier's deductible_category from supplier-database.json
-4. After each upload step, take a screenshot to verify.
-5. On success:
+   Save it to /tmp/invoice_[thread_id].[ext] using Bash
+   (use Google Drive MCP download_file_content if attachment is in Drive, or extract from thread).
+2. Upload to CPA app via Chrome MCP:
+   a. Navigate to: https://hadadlevi.account-ant.com/7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7/documents
+   b. Click the blue "+" button (ref_2).
+   c. Use mcp__Claude_in_Chrome__file_upload to upload /tmp/invoice_[thread_id].[ext].
+   d. Click "אישור ושליחה" button.
+   e. Verify the document now appears in the list with status "ממתין".
+3. Clean up /tmp/ file with Bash after upload.
+4. On success:
    - Add to processed-log.json.processed_emails:
      ```json
      {

@@ -16,13 +16,18 @@ allowed-tools:
   - mcp__computer-use__screenshot
   - mcp__computer-use__left_click
   - mcp__computer-use__type
-  - mcp__computer-use__teach_step
-  - mcp__computer-use__teach_batch
   - mcp__computer-use__open_application
   - mcp__computer-use__request_access
   - mcp__computer-use__scroll
   - mcp__computer-use__key
   - mcp__computer-use__double_click
+  - mcp__Claude_in_Chrome__navigate
+  - mcp__Claude_in_Chrome__read_page
+  - mcp__Claude_in_Chrome__computer
+  - mcp__Claude_in_Chrome__file_upload
+  - mcp__Claude_in_Chrome__find
+  - mcp__Claude_in_Chrome__tabs_context_mcp
+  - mcp__Claude_in_Chrome__tabs_create_mcp
   - Bash
 ---
 
@@ -347,29 +352,46 @@ For each candidate thread:
 
 ### PHASE 4A: UPLOAD AUTO-APPROVED (email attachment)
 For each item in upload queue (retrieval_method="email_attachment"):
-1. Download attachment from Gmail (get attachment from get_thread result, save to /tmp/).
-2. Load cpa-upload-script.json to get the recorded upload steps.
-3. Execute the steps using computer-use, substituting per-invoice data (file path, date, amount, supplier, category from supplier-database.json).
-4. Take a screenshot after each key step to verify.
-5. On success:
+1. Download the invoice PDF attachment from the Gmail thread (use get_thread, extract attachment,
+   save to /tmp/invoice_[thread_id].pdf using Bash).
+2. Upload to CPA app via Chrome MCP:
+   a. Use mcp__Claude_in_Chrome__navigate to: https://hadadlevi.account-ant.com/7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7/documents
+   b. Click the blue "+" button (ref_2 or coordinate ~[1453, 110] in the app).
+   c. Use mcp__Claude_in_Chrome__file_upload to upload the local file from /tmp/.
+   d. Click "אישור ושליחה" (Confirm and send) button.
+   e. Verify document appears in list with status "ממתין".
+3. On success:
    - Add to processed-log.json: {supplier, outcome:"uploaded", processed_at:now, attachment_name}
    - Increment processed-log.json stats.total_uploaded
-6. On failure:
+   - Clean up /tmp/ file with Bash
+4. On failure:
    - Check if retry_count < 3: set outcome="upload_failed_retry", increment retry_count
    - If retry_count >= 3: set outcome="upload_failed_permanent"
    - Add to processed-log.json
+   - Clean up /tmp/ file
+
+### CPA APP UPLOAD DETAILS (recorded 2026-04-29)
+- App URL: https://hadadlevi.account-ant.com/
+- Business ID: 7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7
+- Documents page: https://hadadlevi.account-ant.com/7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7/documents
+- Upload button: blue "+" button (top right of app, DOM ref_2)
+- File drop zone: dashed box in modal — "בחר קובץ מהמחשב או גרור לכאן"
+- Submit button text: "אישור ושליחה"
+- Status after upload: "ממתין" (pending CPA review — CPA assigns categories, no fields needed)
+- Max 20 documents per upload batch
 
 ### PHASE 4B: FETCH AND UPLOAD (website notification suppliers e.g. כביש 6)
 For each item in website queue (retrieval_method="website_notification"):
 1. Load the supplier's website_script from supplier-database.json (recorded during /invoice-scanner teach <supplier>).
 2. Execute the website script using computer-use:
-   a. Open the supplier's website
+   a. Open the supplier's website (use mcp__Claude_in_Chrome__navigate)
    b. Fill in the phone number (from supplier entry's website_phone field)
-   c. Wait for SMS code to appear in Mac Messages app (take screenshot of Messages)
-   d. Enter the SMS code
-   e. Navigate to invoice download
-   f. Download the invoice to /tmp/
-3. Once downloaded, upload to CPA app (same as Phase 4A steps 2-6).
+   c. Request SMS code on the website
+   d. Wait for SMS to appear in Mac Messages app (use computer-use screenshot of Messages)
+   e. Enter the SMS code on the supplier website
+   f. Navigate to invoice/download section
+   g. Download the invoice to /tmp/ (use mcp__Claude_in_Chrome__file_upload or Bash)
+3. Once downloaded, upload to CPA app using same steps as Phase 4A (step 2).
 4. On success: log outcome="uploaded_via_website"
 5. On failure: log outcome="website_fetch_failed", include in digest ⚠️ section
 
