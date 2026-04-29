@@ -262,22 +262,54 @@ This is the full pipeline, run either by the scheduled task or /invoice-scanner 
 - Read supplier-database.json, processed-log.json, and pending-review.json from Google Drive.
 - Read cpa-upload-script.json to verify teaching_complete=true. If false, STOP and tell user: "Teaching session not completed. Please run /invoice-scanner teach first."
 
-## DEDUPLICATION — TWO KEYS (CRITICAL)
-Before uploading ANY invoice, always check BOTH deduplication keys:
-1. **Gmail thread ID** (for email-based): check processed-log.json.processed_emails keys
-2. **Billing key** = `"<normalized_supplier_name>-<YYYY-MM>"` (for all types): check processed-log.json.billed_months
+## DEDUPLICATION — THREE KEYS (CRITICAL)
+Before uploading ANY invoice, run these checks in order:
 
-If EITHER key matches → skip. Do not upload.
-This prevents double-upload even when the same invoice arrives via email AND monthly proactive check.
+### STEP 1 — Extract the invoice number
+Try to find a unique invoice number using these methods in order:
+1. **Email subject line** — scan for patterns:
+   - Hebrew: `חשבונית\s*(?:מס[\'"]?\s*)?(\d+)`, `מספר\s*(\d+)`, `קבלה\s*(\d+)`
+   - English: `invoice\s*#?\s*(\d+)`, `inv[-\s#]?(\d+)`, `receipt\s*#?\s*(\d+)`
+   - General: `#(\d{4,})` (4+ digit number preceded by #)
+2. **Attachment filename** — apply same patterns to the filename
+3. **Fallback** — if no invoice number found, use billing month instead (see below)
 
-When logging a successful upload, always record BOTH:
-- processed_emails["<thread_id>"] (or "website-<supplier>-<YYYY-MM>" if no thread ID)
-- billed_months["<supplier>-<YYYY-MM>"] = { uploaded_at, method, outcome }
+### STEP 2 — Check deduplication keys
+Check ALL THREE keys. If ANY matches → do not upload.
 
-The billing month is extracted from:
-1. Email subject line (look for month name or MM/YYYY pattern)
-2. Invoice date in attachment if parseable
-3. Fallback: current calendar month
+| Key | Format | Example | Purpose |
+|-----|--------|---------|---------|
+| **Thread ID** | gmail thread ID | `"18f2a3b4c5"` | Prevents same email being processed twice |
+| **Invoice number** | `supplier-INV-number` | `"partner-INV-12345"` | Prevents same invoice uploaded twice regardless of how it arrived |
+| **Billing month** *(fallback)* | `supplier-YYYY-MM` | `"סלקום-2026-04"` | Used only when invoice number cannot be extracted |
+
+### STEP 3 — Handle second invoice from same supplier in same month
+If invoice number IS found: both invoices have different numbers → upload both normally.
+If invoice number is NOT found (using month fallback):
+- First invoice for that supplier+month → upload normally
+- Second invoice for same supplier+month → DO NOT auto-upload
+  → Add to digest with special flag: ⚠️ "Second invoice from [supplier] this month — invoice number not found. Please verify and upload manually if legitimate."
+  → Log outcome="duplicate_unverifiable"
+
+### STEP 4 — Log after every upload
+Always record ALL applicable keys:
+```json
+{
+  "processed_emails": {
+    "<thread_id>": { "supplier": "...", "invoice_number": "12345", "outcome": "uploaded", "processed_at": "..." }
+  },
+  "invoice_numbers": {
+    "partner-INV-12345": { "uploaded_at": "...", "method": "email_attachment" }
+  },
+  "billed_months": {
+    "partner-2026-04": { "uploaded_at": "...", "invoice_number": "12345" }
+  }
+}
+```
+
+### Invoice number extraction — if still not found after subject + filename:
+Do NOT scan the full PDF content (too complex, unreliable for Hebrew PDFs).
+Instead, treat as month-fallback case and flag in digest as described in Step 3.
 
 ### PHASE 2: GMAIL SCAN
 Run these 3 Gmail searches (mcp__af9311f4__search_threads).

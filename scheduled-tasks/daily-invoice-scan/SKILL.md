@@ -52,6 +52,18 @@ Combine all results. De-duplicate by thread ID.
 Remove any thread ID that already exists as a key in processed-log.json.processed_emails.
 Result: candidate list of new invoice threads.
 
+## DEDUPLICATION — THREE KEYS (run before every upload)
+1. Extract invoice number from email subject or attachment filename using regex:
+   - Hebrew: חשבונית\s*(?:מס)?\s*(\d+) | מספר\s*(\d+) | קבלה\s*(\d+)
+   - English: invoice\s*#?\s*(\d+) | inv[-\s#]?(\d+) | #(\d{4,})
+2. Check ALL three keys — skip if ANY matches:
+   - processed_emails[thread_id]
+   - invoice_numbers["supplier-INV-number"] (if invoice number found)
+   - billed_months["supplier-YYYY-MM"] (fallback if no invoice number)
+3. If invoice number not found AND billed_months key already exists:
+   → DO NOT upload. Add to digest: "⚠️ Second invoice from [supplier] this month — invoice number not found. Please verify manually."
+4. After upload, log ALL applicable keys to processed-log.json.
+
 ### PHASE 3: CLASSIFY CANDIDATES
 For each candidate thread ID:
 1. Call mcp__af9311f4__get_thread to get full thread details.

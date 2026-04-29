@@ -34,14 +34,27 @@
         }
       }
     },
-    "billed_months": {
+    "invoice_numbers": {
       "type": "object",
-      "description": "Second deduplication key: supplier+month. Key format: 'normalized_supplier-YYYY-MM'. Prevents double-upload when same invoice arrives via email AND proactive website check.",
+      "description": "Primary deduplication key: supplier+invoice_number. Key format: 'normalized_supplier-INV-number'. Most precise — allows two different invoices from same supplier in same month.",
       "additionalProperties": {
         "type": "object",
         "properties": {
           "uploaded_at": { "type": "string", "format": "date-time" },
           "method": { "type": "string", "enum": ["email_attachment", "website_notification", "website_proactive"] },
+          "gmail_thread_id": { "type": "string" }
+        }
+      }
+    },
+    "billed_months": {
+      "type": "object",
+      "description": "Fallback deduplication key (used only when invoice number cannot be extracted): supplier+month. Key format: 'normalized_supplier-YYYY-MM'.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "uploaded_at": { "type": "string", "format": "date-time" },
+          "method": { "type": "string", "enum": ["email_attachment", "website_notification", "website_proactive"] },
+          "invoice_number": { "type": ["string", "null"] },
           "outcome": { "type": "string" }
         }
       }
