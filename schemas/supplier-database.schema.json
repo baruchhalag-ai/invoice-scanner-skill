@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Supplier Database",
+  "description": "Approved and blocked suppliers for invoice auto-upload",
+  "type": "object",
+  "required": ["schema_version", "suppliers"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "last_updated": { "type": "string", "format": "date-time" },
+    "suppliers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["normalized_name", "auto_approve", "tax_deductible"],
+        "properties": {
+          "normalized_name": { "type": "string" },
+          "auto_approve": { "type": "boolean" },
+          "tax_deductible": { "type": "boolean" },
+          "deductible_category": {
+            "type": ["string", "null"],
+            "enum": [
+              "communications",
+              "software_subscriptions",
+              "office_supplies",
+              "professional_services",
+              "travel_business",
+              "equipment",
+              "insurance_business",
+              "other_business",
+              null
+            ]
+          },
+          "first_seen": { "type": "string", "format": "date" },
+          "last_decision": { "type": "string", "format": "date" },
+          "decision_made_by": { "type": "string", "enum": ["user", "auto"] },
+          "notes": { "type": "string" },
+          "email_patterns": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

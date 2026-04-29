@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "processed_emails": {},
+  "stats": {
+    "total_processed": 0,
+    "total_uploaded": 0,
+    "total_skipped": 0,
+    "total_pending": 0,
+    "last_run": null
+  }
+}

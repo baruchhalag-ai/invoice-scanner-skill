@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Processed Invoice Log",
+  "description": "Deduplication log of all Gmail threads that have been processed",
+  "type": "object",
+  "required": ["schema_version", "processed_emails", "stats"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "processed_emails": {
+      "type": "object",
+      "description": "Keys are Gmail thread IDs",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["outcome", "processed_at"],
+        "properties": {
+          "supplier": { "type": "string" },
+          "sender_email": { "type": "string" },
+          "subject": { "type": "string" },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "uploaded",
+              "uploaded_one_time",
+              "skipped_blocked_supplier",
+              "skipped_user_rejected",
+              "skipped_deferred",
+              "upload_failed_retry",
+              "upload_failed_permanent"
+            ]
+          },
+          "processed_at": { "type": "string", "format": "date-time" },
+          "attachment_name": { "type": "string" },
+          "retry_count": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "properties": {
+        "total_processed": { "type": "integer" },
+        "total_uploaded": { "type": "integer" },
+        "total_skipped": { "type": "integer" },
+        "total_pending": { "type": "integer" },
+        "last_run": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

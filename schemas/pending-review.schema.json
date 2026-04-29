@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pending Invoice Review",
+  "description": "Invoices from unknown suppliers awaiting user decision",
+  "type": "object",
+  "required": ["schema_version", "items"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "last_updated": { "type": "string", "format": "date-time" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "gmail_thread_id", "supplier_detected", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "gmail_thread_id": { "type": "string" },
+          "detected_at": { "type": "string", "format": "date-time" },
+          "supplier_detected": { "type": "string" },
+          "sender_email": { "type": "string" },
+          "subject": { "type": "string" },
+          "amount": { "type": "string" },
+          "currency": { "type": "string" },
+          "attachment_name": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["awaiting_decision", "deferred"]
+          }
+        }
+      }
+    }
+  }
+}
