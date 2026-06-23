@@ -1,9 +1,5 @@
 # Runtime data — stored in Google Drive, not git
-invoice-scanner/supplier-database.json
-invoice-scanner/processed-log.json
-invoice-scanner/pending-review.json
-invoice-scanner/cpa-upload-script.json
-invoice-scanner/run-log.json
+invoice-scanner/
 
 # Temporary files
 /tmp/

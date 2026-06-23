@@ -320,10 +320,10 @@ Instead, treat as month-fallback case and flag in digest as described in Step 3.
 Run these 3 Gmail searches (mcp__af9311f4__search_threads).
 IMPORTANT: All queries include `in:anywhere` to search ALL folders including Spam, Promotions, and All Mail — not just Inbox.
 
-1. `in:anywhere (חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") newer_than:2d`
-2. `in:anywhere (invoice OR receipt OR "tax invoice" OR billing) newer_than:2d`
+1. `in:anywhere (חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") newer_than:8d`
+2. `in:anywhere (invoice OR receipt OR "tax invoice" OR billing) newer_than:8d`
 3. From-domain search built from email_patterns in supplier-database.json (if any exist):
-   `in:anywhere (from:@domain1.com OR from:@domain2.com) newer_than:2d`
+   `in:anywhere (from:@domain1.com OR from:@domain2.com) newer_than:8d`
 
 Note: Pass 1 and 2 intentionally do NOT require has:attachment — this catches notification
 emails from suppliers like כביש 6 who send a "your invoice is ready" email without attaching it.
@@ -351,36 +351,129 @@ For each candidate thread:
    - UNKNOWN → add to "pending list"
 
 ### PHASE 4A: UPLOAD AUTO-APPROVED (email attachment)
-For each item in upload queue (retrieval_method="email_attachment"):
-1. Download the invoice PDF attachment from the Gmail thread (use get_thread, extract attachment,
-   save to /tmp/invoice_[thread_id].pdf using Bash).
-2. Upload to CPA app via Chrome MCP:
-   a. Use mcp__Claude_in_Chrome__navigate to: https://hadadlevi.account-ant.com/7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7/documents
-   b. Click the blue "+" button (ref_2 or coordinate ~[1453, 110] in the app).
-   c. Use mcp__Claude_in_Chrome__file_upload to upload the local file from /tmp/.
-   d. Click "אישור ושליחה" (Confirm and send) button.
-   e. Verify document appears in list with status "ממתין".
-3. On success:
-   - Add to processed-log.json: {supplier, outcome:"uploaded", processed_at:now, attachment_name}
-   - Increment processed-log.json stats.total_uploaded
-   - Clean up /tmp/ file with Bash
-4. On failure:
-   - Check if retry_count < 3: set outcome="upload_failed_retry", increment retry_count
-   - If retry_count >= 3: set outcome="upload_failed_permanent"
-   - Add to processed-log.json
-   - Clean up /tmp/ file
 
-### CPA APP UPLOAD DETAILS (recorded 2026-04-29)
-- App URL: https://hadadlevi.account-ant.com/
-- Business ID: 7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7
-- Documents page: https://hadadlevi.account-ant.com/7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7/documents
-- Upload button: blue "+" button (top right of app, DOM ref_2)
-- File drop zone: dashed box in modal — "בחר קובץ מהמחשב או גרור לכאן"
-- Submit button text: "אישור ושליחה"
-- Status after upload: "ממתין" (pending CPA review — CPA assigns categories, no fields needed)
-- Max 20 documents per upload batch
+#### Upload Method: Email Forwarding via IMAP + SMTP
+Credentials: load from `~/.claude/invoice-scanner-secrets.json` (gmail_user, gmail_app_password, cpa_email).
+The CPA system (acc+052694569@account-ant.com) accepts invoice PDFs sent by email.
+Documents appear automatically with status "ממתין" (pending CPA review). No browser needed.
 
-### PHASE 4B: FETCH AND UPLOAD (website notification suppliers e.g. כביש 6)
+For each item in upload queue (retrieval_method="email_attachment"), run via Bash/Python:
+
+```python
+import imaplib, smtplib, email, json
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+
+with open('/Users/barryhalag/.claude/invoice-scanner-secrets.json') as f:
+    secrets = json.load(f)
+GMAIL_USER = secrets['gmail_user']
+APP_PASS = secrets['gmail_app_password']
+CPA_EMAIL = secrets['cpa_email']
+
+def upload_invoice(thread_id, attachment_filter=None):
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login(GMAIL_USER, APP_PASS)
+    mail.select('"[Gmail]/All Mail"')
+    dec_id = int(thread_id, 16)
+    res, data = mail.uid("search", None, f'X-GM-THRID {dec_id}')
+    if res != "OK" or not data[0]:
+        mail.logout()
+        return {"ok": False, "reason": "thread not found"}
+    uid = data[0].split()[-1]
+    res, msg_data = mail.uid("fetch", uid, "(RFC822)")
+    raw = msg_data[0][1]
+    msg = email.message_from_bytes(raw)
+    subject = msg.get("Subject", "Invoice")
+    mail.logout()
+
+    pdf_found = None
+    for part in msg.walk():
+        fn = part.get_filename() or ""
+        ct = part.get_content_type()
+        if not ("pdf" in ct or fn.lower().endswith(".pdf")):
+            continue
+        if attachment_filter and attachment_filter.get("type") == "filename_prefix":
+            if not fn.startswith(attachment_filter["prefix"]):
+                continue
+        pdf_found = (fn, part.get_payload(decode=True))
+        break
+
+    if not pdf_found:
+        return {"ok": False, "reason": "no matching PDF attachment"}
+
+    fn, pdf_data = pdf_found
+    fwd = MIMEMultipart()
+    fwd["From"] = GMAIL_USER
+    fwd["To"] = CPA_EMAIL
+    fwd["Subject"] = subject
+    part = MIMEBase("application", "pdf")
+    part.set_payload(pdf_data)
+    encoders.encode_base64(part)
+    part.add_header("Content-Disposition", f'attachment; filename="{fn}"')
+    fwd.attach(part)
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(GMAIL_USER, APP_PASS)
+        smtp.send_message(fwd)
+
+    return {"ok": True, "filename": fn, "subject": subject}
+```
+
+On success:
+- Add to processed-log.json: {supplier, invoice_number, outcome:"uploaded", method:"email_forward_smtp", processed_at:now, attachment_name}
+- Log to invoice_numbers and billed_months keys in processed-log.json.
+- Increment processed-log.json stats.total_uploaded and total_processed.
+
+On failure:
+- If retry_count < 3: set outcome="upload_failed_retry", increment retry_count.
+- If retry_count >= 3: set outcome="upload_failed_permanent".
+- Add to processed-log.json and include in digest ⚠️ section.
+
+### PHASE 4B: VERIFY UPLOADS AT חדד לוי רואי חשבון
+
+Run this after ALL uploads in Phase 4A are complete (skip if upload queue was empty).
+
+Purpose:
+1. Confirm every uploaded invoice actually appears in the CPA system.
+2. Detect if any invoice was accidentally uploaded twice (duplicate).
+
+#### Key principle — targeted search, NOT full page read:
+We already know exactly which invoice numbers we just uploaded (from the upload queue).
+So instead of reading the entire document list (expensive), we search for each specific
+invoice number on the page. This uses minimal tokens.
+
+#### Steps:
+
+1. Navigate to the CPA documents page using Chrome MCP:
+   URL: https://hadadlevi.account-ant.com/7914A263-C7D5-4C3E-A0C5-2D836B6BB7D7/documents
+   Wait 5 seconds for the page to load.
+
+2. For each invoice just uploaded, extract its search key:
+   - If invoice_number is known (e.g. "QPD7ZLKP-0006") → use that as search key.
+   - If no invoice number → use the filename without extension (e.g. "חשבונית-2026-04").
+
+3. For each search key, run:
+   mcp__Claude_in_Chrome__find with query = the search key string.
+   Count the number of matching elements returned.
+
+   - Count = 0 → NOT FOUND. Add to digest ⚠️:
+     "⚠️ [supplier] | [invoice_number] — שולח אך לא נמצא בחדד לוי. ייתכן עיכוב. בדוק ידנית."
+     Update processed-log.json outcome to "upload_sent_unverified".
+   - Count = 1 → VERIFIED ✅. Update processed-log.json outcome to "uploaded_verified".
+   - Count ≥ 2 → DUPLICATE ⚠️. Add to digest:
+     "⚠️ כפילות זוהתה בחדד לוי: [supplier] | [invoice_number] — מופיע [count] פעמים. בדוק ידנית."
+     Update processed-log.json outcome to "uploaded_duplicate_detected".
+
+4. No screenshot needed unless a duplicate or missing invoice is found.
+
+#### Important notes:
+- If navigation fails (not logged in / session expired): log outcome="verification_skipped_session_expired"
+  and add to digest: "⚠️ לא ניתן לאמת העלאות — תוקף ההתחברות לחדד לוי פג. בדוק ידנית."
+- Do NOT block the rest of the run if verification fails — continue to Phase 4C.
+- If an invoice is not found, it is "unverified" (not "failed") — email forwarding can have a short delay.
+
+### PHASE 4C: FETCH AND UPLOAD (website notification suppliers e.g. כביש 6)
 For each item in website queue (retrieval_method="website_notification"):
 1. Load the supplier's website_script from supplier-database.json (recorded during /invoice-scanner teach <supplier>).
 2. Execute the website script using computer-use:
@@ -390,8 +483,8 @@ For each item in website queue (retrieval_method="website_notification"):
    d. Wait for SMS to appear in Mac Messages app (use computer-use screenshot of Messages)
    e. Enter the SMS code on the supplier website
    f. Navigate to invoice/download section
-   g. Download the invoice to /tmp/ (use mcp__Claude_in_Chrome__file_upload or Bash)
-3. Once downloaded, upload to CPA app using same steps as Phase 4A (step 2).
+   g. Download the invoice to /tmp/ using Bash
+3. Once downloaded, send to CPA via SMTP (same as Phase 4A — attach /tmp/ file and email to CPA_EMAIL).
 4. On success: log outcome="uploaded_via_website"
 5. On failure: log outcome="website_fetch_failed", include in digest ⚠️ section
 
