@@ -88,7 +88,8 @@ Steps:
     "total_uploaded": 0,
     "total_skipped": 0,
     "total_pending": 0,
-    "last_run": null
+    "last_run": null,
+    "last_scan_date": null
   }
 }
 ```
@@ -317,13 +318,26 @@ Do NOT scan the full PDF content (too complex, unreliable for Hebrew PDFs).
 Instead, treat as month-fallback case and flag in digest as described in Step 3.
 
 ### PHASE 2: GMAIL SCAN
+
+#### Determine the scan window
+Read `stats.last_scan_date` from processed-log.json:
+- If null (first run): use `after:2020/01/01` — scan everything from the beginning.
+- Otherwise: use `after:YYYY/MM/DD` where the date is the value of `last_scan_date`
+  formatted with slashes instead of dashes.
+  Example: `"last_scan_date": "2026-09-08"` → `after:2026/09/08`
+
+This means every scan picks up exactly where the previous one left off, with no gap and
+no arbitrary window. Thread-ID deduplication in processed-log.json prevents any
+double-uploads for threads that overlap slightly between scans.
+
 Run these 3 Gmail searches (mcp__af9311f4__search_threads).
 IMPORTANT: All queries include `in:anywhere` to search ALL folders including Spam, Promotions, and All Mail — not just Inbox.
+Replace `[AFTER_DATE]` below with the `after:YYYY/MM/DD` value determined above.
 
-1. `in:anywhere (חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") newer_than:8d`
-2. `in:anywhere (invoice OR receipt OR "tax invoice" OR billing) newer_than:8d`
+1. `in:anywhere (חשבונית OR קבלה OR "חשבון מס" OR "חשבונית מס") [AFTER_DATE]`
+2. `in:anywhere (invoice OR receipt OR "tax invoice" OR billing) [AFTER_DATE]`
 3. From-domain search built from email_patterns in supplier-database.json (if any exist):
-   `in:anywhere (from:@domain1.com OR from:@domain2.com) newer_than:8d`
+   `in:anywhere (from:@domain1.com OR from:@domain2.com) [AFTER_DATE]`
 
 Note: Pass 1 and 2 intentionally do NOT require has:attachment — this catches notification
 emails from suppliers like כביש 6 who send a "your invoice is ready" email without attaching it.
@@ -529,9 +543,13 @@ Use mcp__af9311f4__create_draft to create this draft.
 If there are 0 items in all categories (nothing found), skip the digest or send a brief "Nothing new today" draft.
 
 ### PHASE 7: SAVE STATE
-- Write updated processed-log.json to Google Drive (overwrite existing file).
-- Write updated pending-review.json to Google Drive (overwrite existing file).
-- Append to run-log.json: {run_at, uploaded_count, skipped_count, pending_count, failed_count}.
+- Set `stats.last_scan_date` in processed-log.json to today's date (format: "YYYY-MM-DD").
+  This is the cursor for the next run — Phase 2 will use `after:` with this date.
+- Set `stats.last_run` in processed-log.json to the current ISO datetime.
+- Write updated processed-log.json to Google Drive (create new file, trash old one).
+- Write updated pending-review.json to Google Drive (create new file, trash old one).
+- Append to run-log.json: {run_at, scan_from, uploaded_count, skipped_count, pending_count, failed_count}.
+  `scan_from` = the `after:` date used in this run's Phase 2.
 - Write updated run-log.json to Google Drive.
 
 ### PHASE 8: COMPLETE
